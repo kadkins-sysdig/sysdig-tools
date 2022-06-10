@@ -1,6 +1,6 @@
 #
 # A python script to extract the vulnerability scanning results from the 
-# JSON output of the sysdig-cli-scanner into a CSV format.
+# JSON output of the sysdig-cli-scanner.
 #
 # The results are written to stdout.
 #
@@ -14,7 +14,7 @@ import sys
 import os.path
 import json
 
-USAGE = "Usage: python3 "+sys.argv[0]+" [--help] | [JSON FILE]"
+USAGE = "Usage: python3 "+sys.argv[0]+" [--help] | [sysdig-cli-scanner JSON output file]"
 
 def validateArgs() -> None:
     args = sys.argv[1:]
@@ -25,24 +25,35 @@ def validateArgs() -> None:
       raise SystemExit(USAGE)
 
     if not os.path.exists(args[0]):
-      print(args[0],": No such file!")
+      print("Error: ",args[0],": No such file!")
       raise SystemExit(USAGE)
 
 def processJsonFile() -> None:
     
     try:
       jsonFileArg = sys.argv[1:][0]
+      with open(jsonFileArg) as json_file:
+        data = json.load(json_file)
+
     except:
-      print(args[0],": Error loading JSON file!")
+      print("Error:",sys.argv[1:][0],": Invalid JSON file!")
       raise SystemExit(USAGE)
 
-    with open(jsonFileArg) as json_file:
-      data = json.load(json_file)
+    # Simple validation of JSON file format
+    try:
+        metadata = data['metadata']
+        vulnerabilties = data['vulnerabilities']
+        packages = data['packages']
+        policies = data['policies']
+        info = data['info']
+    except:
+      print("Error:",jsonFileArg,": JSON file is not from sysdig-cli-scanner!")
+      raise SystemExit(USAGE)
 
-    image = data['metadata']
+    image = metadata 
     imageName = image['pullString'].split(":")[0]
     imageTag = image['pullString'].split(":")[1]
-    package_data = data['packages']['list']
+    package_data = packages['list']
 
     print("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}".format( \
       "Vulnerability ID",
