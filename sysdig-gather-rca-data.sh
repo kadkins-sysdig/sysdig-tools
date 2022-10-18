@@ -15,7 +15,7 @@ for pod in $SA_PODS
 do
   mkdir sa-${pod}
   cd sa-${pod}
-  kubectl -n ${NAMESPACE} -c sysdig cp ${pod}:/opt/draios/logs/draios.log .
+  kubectl -n ${NAMESPACE} -c sysdig cp ${pod}:/opt/draios/logs .
   kubectl -n ${NAMESPACE} describe pod ${pod} > ${pod}_describe.txt
   cd ..
 done
@@ -38,6 +38,7 @@ kubectl get pods -n ${NAMESPACE} -o wide > sysdig-running-pods.txt
 kubectl get ds -n ${NAMESPACE} -o wide > sysdig-running-ds.txt
 kubectl get nodes -o json | jq -r '.items[].status.images[] | .sizeBytes' | sort -nr | head -1 > largest-image-size.txt
 kubectl describe nodes > nodes-describe.txt
+kubectl get events -A --sort-by=.metadata.creationTimestamp > all-events.txt 
 
 cd ..
 tar -czvf ${OUTPUT_DIR}.tar.gz ./${OUTPUT_DIR}
