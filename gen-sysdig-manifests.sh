@@ -2,9 +2,8 @@
 #set -x #echo on
 
 #===========================================================
-# This script was written by Kendall Adkins for Verizon to
-# generate manifest files using the sysdig-deploy helm
-# chart.
+# This script was written by Kendall Adkins to generate
+# manifest files using the sysdig-deploy helm chart.
 #
 # Please direct any questions to kendall.adkins@sysdig.com
 #
