@@ -97,7 +97,14 @@ def main():
 
         # Get the user info associated with the api key or exit on invalid api key
         LOG.info(f"Retrieving api key user info...")
-        userinfo = _get_apikey_userinfo(secure_url_authority, authentication_bearer)
+        if len(authentication_bearer) == 36:
+            userinfo = _get_apikey_userinfo(secure_url_authority, authentication_bearer)
+        elif len(authentication_bearer) == 41:
+            userinfo = {"username": "Service Account", "teamname": "Unknown"}
+        else:
+            raise Exception(
+                "Invalid API Key!"
+            )
 
         # Retrieve the report schedules and exit if no schedules found
         LOG.info(
