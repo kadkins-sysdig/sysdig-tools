@@ -99,19 +99,17 @@ def main():
         LOG.info(f"Retrieving api key user info...")
         if len(authentication_bearer) == 36:
             userinfo = _get_apikey_userinfo(secure_url_authority, authentication_bearer)
-        elif len(authentication_bearer) == 41:
-            userinfo = {"username": "Service Account", "teamname": "Unknown"}
-        else:
-            raise Exception(
-                "Invalid API Key!"
+            LOG.info(
+                'Retrieving report schedules for username "{}" in team "{}"...'.format(
+                    userinfo["username"], userinfo["teamname"]
+                )
             )
+        elif len(authentication_bearer) == 41:
+            LOG.info("Retrieving report schedules with a Service Account...")
+        else:
+            raise Exception("Invalid API Key!")
 
         # Retrieve the report schedules and exit if no schedules found
-        LOG.info(
-            'Retrieving report schedules for username "{}" in team "{}"...'.format(
-                userinfo["username"], userinfo["teamname"]
-            )
-        )
         report_schedules = _get_report_schedules(
             secure_url_authority, authentication_bearer
         )
