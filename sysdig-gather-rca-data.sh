@@ -15,8 +15,8 @@ for pod in $SA_PODS
 do
   mkdir sa-${pod}
   cd sa-${pod}
-  kubectl -n ${NAMESPACE} -c sysdig cp ${pod}:/opt/draios/logs .
-  #kubectl -n ${NAMESPACE} -c sysdig cp ${pod}:/opt/draios/logs/draios.log draios.log
+  #kubectl -n ${NAMESPACE} -c sysdig cp ${pod}:/opt/draios/logs .
+  kubectl -n ${NAMESPACE} -c sysdig cp ${pod}:/opt/draios/logs/draios.log draios.log
   kubectl -n ${NAMESPACE} describe pod ${pod} > ${pod}_describe.txt
   cd ..
 done
