@@ -11,6 +11,7 @@
 # as a result of helm chart updates, this script could break.
 #
 # Date: November 2th, 2022
+# Updated: February 14th, 2023
 #
 #===========================================================
 
