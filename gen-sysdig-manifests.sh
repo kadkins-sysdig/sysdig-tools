@@ -202,13 +202,13 @@ mv nodeAnalyzer-runtimeScanner-runtime-scanner-configmap.yaml ${prefix}sana-rs-c
 mv nodeAnalyzer-secrets.yaml ${prefix}sana-se.yaml 2> /dev/null
 mv nodeAnalyzer-serviceaccount-node-analyzer.yaml ${prefix}sana-sa.yaml 2> /dev/null
 mv nodeAnalyzer-configmap-kspm-analyzer.yaml sana-kspm-cm.yaml 2> /dev/null
-mv kspmCollector-clusterrole.yaml kspm-cr.yaml 2> /dev/null
-mv kspmCollector-clusterrolebinding.yaml kspm-crb.yaml 2> /dev/null
-mv kspmCollector-configmap.yaml kspm-cm.yaml 2> /dev/null
-mv kspmCollector-deployment.yaml kspm-de.yaml 2> /dev/null
-mv kspmCollector-secret.yaml kspm-se.yaml 2> /dev/null
-mv kspmCollector-serviceaccount.yaml kspm-sa.yaml 2> /dev/null
-
+mv nodeAnalyzer-configmap-host-scanner.yaml sana-hs-cm.yaml 2> /dev/null
+mv kspmCollector-clusterrole.yaml sa-kspm-cr.yaml 2> /dev/null
+mv kspmCollector-clusterrolebinding.yaml sa-kspm-crb.yaml 2> /dev/null
+mv kspmCollector-configmap.yaml sa-kspm-cm.yaml 2> /dev/null
+mv kspmCollector-deployment.yaml sa-kspm-de.yaml 2> /dev/null
+mv kspmCollector-secret.yaml sa-kspm-se.yaml 2> /dev/null
+mv kspmCollector-serviceaccount.yaml sa-kspm-sa.yaml 2> /dev/null
 #
 # Done
 #
