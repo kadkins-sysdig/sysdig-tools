@@ -38,7 +38,7 @@ kubectl -n ${NAMESPACE} get cm sysdig-agent-runtime-scanner -o yaml > sana-cm.ya
 kubectl get pods -n ${NAMESPACE} -o wide > sysdig-running-pods.txt
 kubectl get ds -n ${NAMESPACE} -o wide > sysdig-running-ds.txt
 kubectl get nodes -o json | jq -r '.items[].status.images[] | .sizeBytes' | sort -nr | head -1 > largest-image-size.txt
-kubectl cluster-info dump | grep -i clusterip > clusterip.txt
+kubectl get services > clusterip.txt
 kubectl describe nodes > nodes-describe.txt
 kubectl get events -A --sort-by=.metadata.creationTimestamp > all-events.txt 
 
