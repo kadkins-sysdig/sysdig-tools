@@ -2,7 +2,8 @@
 set -x #echo on
 
 # Set to the namespace you are running Sysdig in
-NAMESPACE=kube-system
+#NAMESPACE=kube-system
+NAMESPACE=sysdig-agent
 
 SFX=`date +"%Y-%m-%d_%H-%M-%S"`
 OUTPUT_DIR=sysdig-${SFX}
