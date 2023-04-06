@@ -102,7 +102,7 @@ def main():
         image_results.sort()
         #print(image_results)
         for image in image_results:
-            print(f"{current_datetime},{image[1]}")
+            print(f"{current_datetime},{image[0]},{image[1]}")
 
     except Exception as e:
         #LOG.critical(e)
