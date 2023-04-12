@@ -4,26 +4,30 @@ import csv
 import sqlite3
 from contextlib import closing
 
-if len(sys.argv) == 1:
-    print("Usage")
+if len(sys.argv) != 3:
+    print("Usage: TODO inputfile output-db.name")
     sys.exit("ERROR: An input file name argument is required!")
 
 inputFile = sys.argv[1]
+outputDbName = sys.argv[2]
 
 if not os.path.isfile(inputFile):
     sys.exit(f"ERROR: The input file {inputFile} does not exist!")
+
+if os.path.isfile(outputDbName):
+    sys.exit(f"ERROR: The output database file {outputDbName} already exists!")
 
 try:
     count = 0
     print("Opening the CSV file...")
     with open(inputFile, 'r') as csvFile:
         csvReader = csv.reader(csvFile)
-        if os.path.isfile("vulns.db"):
+        if os.path.isfile(outputDbName):
             sys.exit(f"ERROR: The database file vulns.db already exists!")
-            #os.remove("vulns.db")
+            #os.remove(outputDbName)
 
         print("Opening the database file...")
-        with closing(sqlite3.connect("vulns.db")) as conn:
+        with closing(sqlite3.connect(outputDbName)) as conn:
 
             cursor = conn.cursor()
 
