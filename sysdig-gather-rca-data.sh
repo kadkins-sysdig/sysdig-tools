@@ -18,7 +18,7 @@ do
   cd sa-${pod}
   #kubectl -n ${NAMESPACE} -c sysdig cp ${pod}:/opt/draios/logs .
   #kubectl -n ${NAMESPACE} -c sysdig cp ${pod}:/opt/draios/logs/draios.log draios.log
-  kubectl -n ${NAMESPACE} logs -c sysdig-runtime-scanner ${pod} > ${pod}.log
+  kubectl -n ${NAMESPACE} logs -c sysdig ${pod} > ${pod}.log
   kubectl -n ${NAMESPACE} describe pod ${pod} > ${pod}_describe.txt
   cd ..
 done
