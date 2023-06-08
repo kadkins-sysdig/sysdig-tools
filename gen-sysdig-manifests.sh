@@ -189,7 +189,7 @@ rm ${TEMPLATE_FILE}
 echo "STATUS: Renaming parsed manifest files"
 prefix=${MANIFEST_PREFIX}
 mv agent-role.yaml ${prefix}sa-r.yaml 2> /dev/null
-mv agent-rrolebinding.yaml ${prefix}sa-rb.yaml 2> /dev/null
+mv agent-rolebinding.yaml ${prefix}sa-rb.yaml 2> /dev/null
 mv agent-clusterrole.yaml ${prefix}sa-cr.yaml 2> /dev/null
 mv agent-clusterrolebinding.yaml ${prefix}sa-crb.yaml 2> /dev/null
 mv agent-configmap.yaml ${prefix}sa-cm.yaml 2> /dev/null
