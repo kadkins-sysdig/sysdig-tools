@@ -289,8 +289,7 @@ def _get_scan_results_list_with_vulnerabilties(scan_results_list):
 
 def _get_runtime_workload_scan_results_list(secure_url_authority):
 
-    #KAA - On US3 1000 will not work...
-    #KAA - The docks say the default limit is 1000
+    #KAA - Setting limit results in unpredictable number of results
     #limit=100
     cursor=""
     json_response=None
