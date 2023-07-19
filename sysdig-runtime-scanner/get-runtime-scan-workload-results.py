@@ -11,10 +11,15 @@
 
   Author: Kendall Adkins
   Date July 11th, 2023
+  Updated: July 18th, 2023
 
   TODO:
      - Look into updating the accepts column and/or adding a new image accepts column.
      - asset.type is not in the JSON output but it can be included in the query string as a filter
+     - add support for Vuln Link column: report_row.append('TODO') ### "Vuln link"
+     - add support for K8S POD count column: report_row.append('TODO') ### "K8S POD count"
+     - add support for Risk accepted column: report_row.append('TODO') ### "Risk accepted")
+     - api bug? periodically get a blank image pull string: result.metatdata.pullString
 """
 
 import argparse
@@ -104,9 +109,9 @@ def main():
         # Get the runtime workload scan results
         LOG.info(f"Retrieving the list of runtime workload scan results...")
         scan_results_list = _get_runtime_workload_scan_results_list(secure_url_authority)
-        LOG.info(f"Found {len(scan_results_list['data'])} total scan results.")
-
-        if len(scan_results_list["data"]) == 0:
+        LOG.info(f"Found {len(scan_results_list)} total scan results.")
+        
+        if len(scan_results_list) == 0:
            LOG.info(f"No scan results found.")
 
         else:
@@ -115,11 +120,11 @@ def main():
             LOG.info(f"Retrieving the runtime workload scan results with vulnerabilities...")
             scan_results_list_with_vulns = _get_scan_results_list_with_vulnerabilties(scan_results_list)
             LOG.info(f"Found {len(scan_results_list_with_vulns)} scan results with vulnerabilities.")
-            LOG.info(f"Found {len(scan_results_list['data']) - len(scan_results_list_with_vulns)} scan results with no vulnerbilities.")
+            LOG.info(f"Found {len(scan_results_list) - len(scan_results_list_with_vulns)} scan results with no vulnerbilities.")
 
             # Get the image scan results for workloads with vulnerabilities
-            LOG.info(f"Retrieving the runtime workload full scan results...")
-            images_with_vulns_scan_results = _get_images_with_vulns_scan_results(secure_url_authority, scan_results_list_with_vulns)
+            LOG.info(f"Retrieving the runtime workload image scan results...")
+            images_with_vulns_scan_results = _get_image_scan_results(secure_url_authority, scan_results_list_with_vulns)
 
             # Gather the report data
             report_data = _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_results)
@@ -189,8 +194,8 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
 
         image_pull_string = images_with_vulns_scan_results[result_id]["result"]["metadata"].get("pullString")
 
-        #KAA - It is strange that you can get a blank result. It seems like these should be HTTP RESPONSE 404
-        # Can occur if image is no longer running
+        #TODO - It is strange that you can get a blank result. It seems like these should be HTTP RESPONSE 404
+        #skip the result if the image pull string is blank
         if image_pull_string == "":
             LOG.warning(f"Found a blank image pull string for scan results id: {result_id}")
             continue
@@ -214,18 +219,15 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
             for vuln in package.get("vulns",{}):
 
                 vuln_name = vuln.get("name","")
-
                 vuln_severity = vuln.get("severity", { "value": "", "sourceName" : "" })
                 vuln_severity_value = vuln_severity["value"]
                 vuln_severity_source = vuln_severity["sourceName"]
-
                 vuln_cvss_score = vuln.get("cvssScore", {'value': {'version': '', 'score': '', 'vector': ''}, 'sourceName': ''})
                 vuln_cvss_score_value = vuln_cvss_score.get("value",{'version': '', 'score': '', 'vector': ''})
                 vuln_cvss_score_value_version = vuln_cvss_score_value["version"]
                 vuln_cvss_score_value_score = vuln_cvss_score_value["score"]
                 vuln_cvss_score_value_vector = vuln_cvss_score_value["vector"]
                 vuln_cvss_score_source = vuln_cvss_score["sourceName"]
-
                 vuln_disclosure_date = vuln["disclosureDate"]
                 vuln_solution_date = vuln.get("solutionDate","")
                 vuln_exploitable = vuln["exploitable"]
@@ -271,7 +273,7 @@ def _get_scan_results_list_with_vulnerabilties(scan_results_list):
 
     scan_results_list_with_vulns = []
 
-    for result in scan_results_list["data"]:
+    for result in scan_results_list:
 
         total_vulns = 0
         total_vulns += result["vulnTotalBySeverity"]["critical"]
@@ -289,18 +291,20 @@ def _get_scan_results_list_with_vulnerabilties(scan_results_list):
 
 def _get_runtime_workload_scan_results_list(secure_url_authority):
 
-    #KAA - Setting limit results in unpredictable number of results
-    #limit=100
+    limit=1000
     cursor=""
     json_response=None
+    runtime_workload_scan_results = []
 
     while True:
         api_path = "secure/vulnerability/v1beta1/runtime-results"
-        #api_url = f"https://{secure_url_authority}/{api_path}?cursor={cursor}&filter=asset.type+%3D+'workload'&limit={limit}"
-        api_url = f"https://{secure_url_authority}/{api_path}?cursor={cursor}&filter=asset.type+%3D+'workload'"
-        #print(f"Calling url: {api_url}")
+        api_url = f"https://{secure_url_authority}/{api_path}?cursor={cursor}&filter=asset.type+%3D+'workload'&limit={limit}"
         response_data = _get_data_from_http_request(api_url)
         json_response = json.loads(response_data)
+
+        LOG.debug(f"Found {len(json_response['data'])} entries in the json_response")
+
+        runtime_workload_scan_results.extend(json_response["data"])
 
         if "next" in json_response["page"]:
             cursor = json_response["page"]["next"]
@@ -309,22 +313,22 @@ def _get_runtime_workload_scan_results_list(secure_url_authority):
 
     #end while
 
-    return json_response
+    return runtime_workload_scan_results
 
-def _get_images_with_vulns_scan_results(secure_url_authority, scan_results_list_with_vulns):
+def _get_images_scan_results(secure_url_authority, scan_results_list_with_vulns):
 
     api_path = "secure/vulnerability/v1beta1/results"
     api_url = f"https://{secure_url_authority}/{api_path}"
-    images_with_vulns_scan_results={}
+    images_scan_results={}
 
     for result in scan_results_list_with_vulns:
         resultId = result["resultId"]
         if resultId not in images_with_vulns_scan_results.keys():
             response_data = _get_data_from_http_request(f"{api_url}/{resultId}")
             json_response = json.loads(response_data)
-            images_with_vulns_scan_results[resultId]=json_response
+            image_scan_results[resultId]=json_response
 
-    return images_with_vulns_scan_results
+    return image_scan_results
 
 def _get_data_from_http_request(url):
 
