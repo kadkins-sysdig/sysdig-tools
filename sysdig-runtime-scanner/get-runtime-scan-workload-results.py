@@ -11,7 +11,7 @@
 
   Author: Kendall Adkins
   Date July 11th, 2023
-  Updated: July 18th, 2023
+  Updated: July 19th, 2023
 
   TODO:
      - Look into updating the accepts column and/or adding a new image accepts column.
@@ -19,7 +19,7 @@
      - add support for Vuln Link column: report_row.append('TODO') ### "Vuln link"
      - add support for K8S POD count column: report_row.append('TODO') ### "K8S POD count"
      - add support for Risk accepted column: report_row.append('TODO') ### "Risk accepted")
-     - api bug? periodically get a blank image pull string: result.metatdata.pullString
+     - api bug? periodically get a blank image pull string without a 404: result.metatdata.pullString
 """
 
 import argparse
@@ -29,6 +29,7 @@ import urllib3
 import json
 import urllib.parse
 from datetime import datetime
+from datetime import timedelta
 import math
 import csv
 import platform
@@ -46,7 +47,17 @@ logging.basicConfig(
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 
 # Setup http client
+#TODO tried timeout but it had no impact; investigate further
+#timeout = urllib3.util.Timeout(connect=5.0, read=10.0)
+#http_client = urllib3.PoolManager(timeout=timeout)
 http_client = urllib3.PoolManager()
+
+# Track number of http response codes
+num_of_429 = 0
+num_of_504 = 0
+
+# Will be set by a passed arg
+secure_url_authority = ""
 
 # Define custom exceptions
 class UnexpectedHTTPResponse(Exception):
@@ -88,6 +99,7 @@ def main():
 
         # Parse the command line arguments
         args = _parse_args()
+        global secure_url_authority
         secure_url_authority = args.secure_url_authority
         authentication_bearer = args.api_token
         csv_file_name = args.csv_file_name
@@ -108,7 +120,7 @@ def main():
 
         # Get the runtime workload scan results
         LOG.info(f"Retrieving the list of runtime workload scan results...")
-        scan_results_list = _get_runtime_workload_scan_results_list(secure_url_authority)
+        scan_results_list = _get_runtime_workload_scan_results_list()
         LOG.info(f"Found {len(scan_results_list)} total scan results.")
         
         if len(scan_results_list) == 0:
@@ -117,14 +129,15 @@ def main():
         else:
 
             # Get the list of runtime workload scan results with vulnerabilities
-            LOG.info(f"Retrieving the runtime workload scan results with vulnerabilities...")
+            LOG.info(f"Searching for runtime workload scan results with vulnerabilities...")
             scan_results_list_with_vulns = _get_scan_results_list_with_vulnerabilties(scan_results_list)
             LOG.info(f"Found {len(scan_results_list_with_vulns)} scan results with vulnerabilities.")
-            LOG.info(f"Found {len(scan_results_list) - len(scan_results_list_with_vulns)} scan results with no vulnerbilities.")
+            LOG.info(f"Found {len(scan_results_list) - len(scan_results_list_with_vulns)} scan results with no vulnerabilities.")
 
             # Get the image scan results for workloads with vulnerabilities
-            LOG.info(f"Retrieving the runtime workload image scan results...")
-            images_with_vulns_scan_results = _get_image_scan_results(secure_url_authority, scan_results_list_with_vulns)
+            LOG.info(f"Retrieving runtime scan results for images with vulnerabilities...")
+            images_with_vulns_scan_results = _get_image_scan_results(scan_results_list_with_vulns)
+            LOG.info(f"Found {len(images_with_vulns_scan_results)} runtime image scan results.")
 
             # Gather the report data
             report_data = _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_results)
@@ -138,7 +151,12 @@ def main():
 
         # End performance counter
         pc_end = time.perf_counter()
-        LOG.info(f"Elapsed execution time: {pc_end - pc_start:0.4f} seconds")
+        elapsed_seconds = pc_end - pc_start
+        execution_time = "{}".format(str(timedelta(seconds=elapsed_seconds)))
+        LOG.info(f"Elapsed execution time: {execution_time}")
+
+        LOG.info(f"HTTP Response Code 429 occured: {num_of_429} times.")
+        LOG.info(f"HTTP Response Code 504 occured: {num_of_504} times.")
 
         LOG.info(f'Request for runtime scan results complete.')
 
@@ -149,7 +167,7 @@ def main():
 
 def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_results):
 
-    report = []
+    report_data = []
 
     report_headers = []
     report_headers.append("Vulnerability ID")
@@ -179,9 +197,8 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
     report_headers.append("In use")
     report_headers.append("Risk accepted")
 
-    report.append(report_headers)
+    report_data.append(report_headers)
     
-    report_data = []
     for result in scan_results_list_with_vulns:
 
         result_id = result["resultId"]
@@ -194,7 +211,6 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
 
         image_pull_string = images_with_vulns_scan_results[result_id]["result"]["metadata"].get("pullString")
 
-        #TODO - It is strange that you can get a blank result. It seems like these should be HTTP RESPONSE 404
         #skip the result if the image pull string is blank
         if image_pull_string == "":
             LOG.warning(f"Found a blank image pull string for scan results id: {result_id}")
@@ -289,7 +305,7 @@ def _get_scan_results_list_with_vulnerabilties(scan_results_list):
 
     return scan_results_list_with_vulns
 
-def _get_runtime_workload_scan_results_list(secure_url_authority):
+def _get_runtime_workload_scan_results_list():
 
     limit=1000
     cursor=""
@@ -315,51 +331,88 @@ def _get_runtime_workload_scan_results_list(secure_url_authority):
 
     return runtime_workload_scan_results
 
-def _get_images_scan_results(secure_url_authority, scan_results_list_with_vulns):
+def _get_image_scan_results(scan_results_list_with_vulns):
 
     api_path = "secure/vulnerability/v1beta1/results"
     api_url = f"https://{secure_url_authority}/{api_path}"
-    images_scan_results={}
-
+    image_scan_results={}
+    spinner = ["|", "/", "-", "\\" ]
+    spinner_idx = 0
+    spinner_end = 3
+    num_of_results = len(scan_results_list_with_vulns)
+    num_of_requests = 0
     for result in scan_results_list_with_vulns:
+
+        #print(spinner[spinner_idx],end="\r")
+        num_of_requests += 1
+        print(f"{spinner[spinner_idx]} Retrieving {num_of_requests} of {num_of_results}...",end="\r")
+        if spinner_idx == spinner_end:
+            spinner_idx = 0
+        else:
+            spinner_idx += 1
+
         resultId = result["resultId"]
-        if resultId not in images_with_vulns_scan_results.keys():
+        if resultId not in image_scan_results.keys():
             response_data = _get_data_from_http_request(f"{api_url}/{resultId}")
             json_response = json.loads(response_data)
             image_scan_results[resultId]=json_response
+
 
     return image_scan_results
 
 def _get_data_from_http_request(url):
 
-    response_data = None
-
     try:
 
+        global num_of_429
+        global num_of_504
+        response_data = None
+
         while True:
+
             LOG.debug(f"Sending http request to: {url}")
+
             response = http_client.request(method="GET", url=url, redirect=True)
             response_data = response.data.decode()
+
             LOG.debug(f"Response status: {response.status}")
+
             if response.status == 200:
                 #LOG.debug(f"Response data: {response_data}")
                 break
-            elif response.status == 429:
+
+            elif response.status in [ 429, 504 ]:
+
+                if response.status == 429:
+                    message = "API throttling"
+                    num_of_429 += 1
+                elif response.status == 504:
+                    message = "Gateway Timeout"
+                    num_of_504 += 1
+
                 LOG.debug(f"Response data: {response_data}")
-                LOG.debug(f"Sleeping 60 seconds due to API throttling...")
-                time.sleep(60)
+                LOG.debug(f"Sleeping 60 seconds due to {message}...")
+
+                for interval in range(1,60):
+                   print(f"Sleeping {60-interval} seconds due to {message}...", end="\r")
+                   time.sleep(1)
+
+                # Extra space to clear earlier message
+                print( "Retrying request...                                    ", end="\r")
+
                 LOG.debug(f"Retrying request...")
+
             else:
                 raise UnexpectedHTTPResponse(
                     f"Unexpected HTTP response status: {response.status}"
                 )
 
+        return response_data
+
     except Exception as e:
         LOG.critical(e)
         LOG.critical(f"Error while requesting url: {url}")
-        raise SystemExit()
-
-    return response_data
+        raise SystemExit(-1)
 
 if __name__ == "__main__":
     sys.exit(main())
