@@ -11,7 +11,7 @@
 
   Author: Kendall Adkins
   Date July 11th, 2023
-  Updated: July 19th, 2023
+  Updated: July 20th, 2023
 
   TODO:
      - Look into updating the accepts column and/or adding a new image accepts column.
@@ -155,8 +155,8 @@ def main():
         execution_time = "{}".format(str(timedelta(seconds=elapsed_seconds)))
         LOG.info(f"Elapsed execution time: {execution_time}")
 
-        LOG.info(f"HTTP Response Code 429 occured: {num_of_429} times.")
-        LOG.info(f"HTTP Response Code 504 occured: {num_of_504} times.")
+        LOG.info(f"HTTP Response Code 429 occurred: {num_of_429} times.")
+        LOG.info(f"HTTP Response Code 504 occurred: {num_of_504} times.")
 
         LOG.info(f'Request for runtime scan results complete.')
 
@@ -255,7 +255,13 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
                 report_row.append(package_name)
                 report_row.append(package_version)
                 report_row.append(package_type)
-                report_row.append(package_path)
+
+                # we don't show package path for os packages
+                # in the runtime report
+                if package_type == "os":
+                    report_row.append('')
+                else:
+                    report_row.append(package_path)
                 report_row.append(image_pull_string)
                 report_row.append(base_os)
                 report_row.append(vuln_cvss_score_value_version)
@@ -268,14 +274,21 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
                 report_row.append(vuln_exploitable)
                 report_row.append(kubernetes_cluster_name)
                 report_row.append(kubernetes_namespace_name)
-                report_row.append(kubernetes_workload_name)
                 report_row.append(kubernetes_workload_type)
+                report_row.append(kubernetes_workload_name)
                 report_row.append(kubernetes_pod_container_name)
                 report_row.append(image_id)
-                report_row.append('TODO') ### "K8S POD count"
+
+                # defaulting for now
+                #report_row.append('TODO') ### "K8S POD count"
+                report_row.append('1') ### "K8S POD count"
+
                 report_row.append(package_suggested_fix)
                 report_row.append(package_in_use)
-                report_row.append('TODO') ### "Risk accepted")
+
+                # defaulting for now
+                #report_row.append('TODO') ### "Risk accepted")
+                report_row.append('false') ### "Risk accepted")
 
                 report_data.append(report_row)
 
