@@ -155,8 +155,8 @@ def main():
         execution_time = "{}".format(str(timedelta(seconds=elapsed_seconds)))
         LOG.info(f"Elapsed execution time: {execution_time}")
 
-        LOG.info(f"HTTP Response Code 429 occurred: {num_of_429} times.")
-        LOG.info(f"HTTP Response Code 504 occurred: {num_of_504} times.")
+        LOG.info(f"HTTP Response Code 429 occured: {num_of_429} times.")
+        LOG.info(f"HTTP Response Code 504 occured: {num_of_504} times.")
 
         LOG.info(f'Request for runtime scan results complete.')
 
