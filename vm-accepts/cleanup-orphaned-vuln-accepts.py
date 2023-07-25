@@ -142,6 +142,7 @@ def main():
         if not delete_orphans and len(image_orphaned_risk_accepts_ids) > 0:
             LOG.info(f"Skipping delete of orphaned vulnerability risk accepts.")
         elif delete_orphans and len(image_orphaned_risk_accepts_ids) > 0:
+            LOG.info(f"Deleting orphaned image vulnerability risk accepts.")
             _delete_orphaned_risk_accepts(secure_url_authority, image_orphaned_risk_accepts_ids)
             LOG.info(f"Deleted orphaned image vulnerability risk accepts.")
         else:
@@ -188,11 +189,16 @@ def _count_orphaned_risk_accepts(image_orphaned_risk_accepts_ids):
 def _delete_orphaned_risk_accepts(secure_url_authority, image_orphaned_risk_accepts_ids):
 
     api_path = "api/scanning/riskmanager/v2/definitions"
+    deleted_ids = []
 
     for image_name in image_orphaned_risk_accepts_ids.keys():
         for accept_def_id in image_orphaned_risk_accepts_ids[image_name]:
-            api_url = f"https://{secure_url_authority}/{api_path}/{accept_def_id}"
-            _delete_data_from_http_request(api_url)
+            if accept_def_id not in deleted_ids:
+                api_url = f"https://{secure_url_authority}/{api_path}/{accept_def_id}"
+                _delete_data_from_http_request(api_url)
+                deleted_ids.append(accept_def_id)
+            else:
+                LOG.debug(f"Found accept already deleted: {accept_def_id}")
 
     return
 
@@ -322,7 +328,7 @@ def _delete_data_from_http_request(url):
                 break
             elif response.status == 429:
                 LOG.debug(f"Response data: {response_data}")
-                LOG.debug(f"Sleeping 60 seconds due to API throttling...")
+                LOG.info(f"Sleeping 60 seconds due to API throttling...")
                 time.sleep(60)
                 LOG.debug(f"Retrying request...")
             else:
@@ -353,7 +359,7 @@ def _get_data_from_http_request(url):
                 break
             elif response.status == 429:
                 LOG.debug(f"Response data: {response_data}")
-                LOG.debug(f"Sleeping 60 seconds due to API throttling...")
+                LOG.info(f"Sleeping 60 seconds due to API throttling...")
                 time.sleep(60)
                 LOG.debug(f"Retrying request...")
             else:
