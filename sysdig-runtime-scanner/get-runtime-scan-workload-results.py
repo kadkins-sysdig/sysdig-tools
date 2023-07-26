@@ -2,7 +2,7 @@
   This python script will retrieve all runtime workload scanning results for the 
   passed api token. 
 
-  The intent it to mimick the current runtime report functionality
+  The intent it to mimic the current runtime report functionality
   so that the result is a runtime report of what is running now.
 
   The report will not contain images without vulnerabilities.
