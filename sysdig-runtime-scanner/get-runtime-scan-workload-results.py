@@ -2,24 +2,27 @@
   This python script will retrieve all runtime workload scanning results for the 
   passed api token. 
 
-  The intent it to mimic the current runtime report functionality
+  The intent it to mimick the current runtime report functionality
   so that the result is a runtime report of what is running now.
 
   The report will not contain images without vulnerabilities.
   
   The report will only retrieve "workload" results and not "host" results.
 
+  The report will only contain high and critical CVEs
+
+  The report will set Accept to True for any image or cve accept accordingly.
+  If an image accept is found all cves in the image will have Accept True.
+
   Author: Kendall Adkins
   Date July 11th, 2023
   Updated: July 20th, 2023
+  Updated: Sept 20th, 2023
 
   TODO:
-     - Look into updating the accepts column and/or adding a new image accepts column.
-     - asset.type is not in the JSON output but it can be included in the query string as a filter
      - add support for Vuln Link column: report_row.append('TODO') ### "Vuln link"
      - add support for K8S POD count column: report_row.append('TODO') ### "K8S POD count"
-     - add support for Risk accepted column: report_row.append('TODO') ### "Risk accepted")
-     - api bug? periodically get a blank image pull string without a 404: result.metatdata.pullString
+     - (SSPROD-30497) bug solution date is blank sometimes when the runtime report and ui are not
 """
 
 import argparse
@@ -47,9 +50,6 @@ logging.basicConfig(
 logging.getLogger("urllib3").setLevel(logging.CRITICAL)
 
 # Setup http client
-#TODO tried timeout but it had no impact; investigate further
-#timeout = urllib3.util.Timeout(connect=5.0, read=10.0)
-#http_client = urllib3.PoolManager(timeout=timeout)
 http_client = urllib3.PoolManager()
 
 # Track number of http response codes
@@ -105,7 +105,7 @@ def main():
         csv_file_name = args.csv_file_name
 
         if os.path.isfile(csv_file_name):
-            LOG.error(f"ERROR: The input csv file {csv_file_name} already exists!")
+            LOG.error(f"ERROR: The output csv file {csv_file_name} already exists!")
             raise SystemExit(-1)
 
         # Get the timestamp of this run
@@ -153,11 +153,10 @@ def main():
         pc_end = time.perf_counter()
         elapsed_seconds = pc_end - pc_start
         execution_time = "{}".format(str(timedelta(seconds=elapsed_seconds)))
-        LOG.info(f"Elapsed execution time: {execution_time}")
 
+        LOG.info(f"Elapsed execution time: {execution_time}")
         LOG.info(f"HTTP Response Code 429 occurred: {num_of_429} times.")
         LOG.info(f"HTTP Response Code 504 occurred: {num_of_504} times.")
-
         LOG.info(f'Request for runtime scan results complete.')
 
     except Exception as e:
@@ -218,8 +217,10 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
 
         image_id = images_with_vulns_scan_results[result_id]["result"]["metadata"]["imageId"]
         base_os = images_with_vulns_scan_results[result_id]["result"]["metadata"]["baseOs"]
+        
+        result_details = images_with_vulns_scan_results[result_id]["result"]
 
-        for package in images_with_vulns_scan_results[result_id]["result"].get("packages", {}):
+        for package in result_details.get("packages", {}):
 
             # skip packages without vulns
             if package.get("vulns") is None:
@@ -237,6 +238,12 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
                 vuln_name = vuln.get("name","")
                 vuln_severity = vuln.get("severity", { "value": "", "sourceName" : "" })
                 vuln_severity_value = vuln_severity["value"]
+
+                #KAA
+                if vuln_severity_value not in ["Critical","High"]:
+                    #print(f"vuln_severity_value := {vuln_severity_value}")
+                    continue
+
                 vuln_severity_source = vuln_severity["sourceName"]
                 vuln_cvss_score = vuln.get("cvssScore", {'value': {'version': '', 'score': '', 'vector': ''}, 'sourceName': ''})
                 vuln_cvss_score_value = vuln_cvss_score.get("value",{'version': '', 'score': '', 'vector': ''})
@@ -248,6 +255,7 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
                 vuln_solution_date = vuln.get("solutionDate","")
                 vuln_exploitable = vuln["exploitable"]
                 vuln_fixed_in_version = vuln.get("fixedInVersion","")
+                vuln_risk_accepted = _is_risk_accepted(result_details, vuln, package)
 
                 report_row = []
                 report_row.append(vuln_name)
@@ -267,7 +275,8 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
                 report_row.append(vuln_cvss_score_value_version)
                 report_row.append(vuln_cvss_score_value_score)
                 report_row.append(vuln_cvss_score_value_vector)
-                report_row.append('TODO') ### "Vuln link"
+                #report_row.append('TODO') ### "Vuln link"
+                report_row.append('') ### "Vuln link"
                 report_row.append(vuln_disclosure_date)
                 report_row.append(vuln_solution_date)
                 report_row.append(vuln_fixed_in_version)
@@ -286,9 +295,7 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
                 report_row.append(package_suggested_fix)
                 report_row.append(package_in_use)
 
-                # defaulting for now
-                #report_row.append('TODO') ### "Risk accepted")
-                report_row.append('false') ### "Risk accepted")
+                report_row.append(vuln_risk_accepted) ### "Risk accepted")
 
                 report_data.append(report_row)
 
@@ -297,6 +304,43 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
         #end - for package
 
     return report_data 
+
+def _is_risk_accepted(result, vuln, package):
+
+    risk_accepted = False
+
+    # * the defs
+    risk_accept_defs = result.get("riskAcceptanceDefinitions")
+
+    #* points back to accept defs
+
+    #KAA-TODO: Double check with accept id
+
+    # Image Risk Accepts
+    # Set all vulns to "accepted" for image risk accepts
+
+    # Process image accepts
+    asset_accepted_risks = result.get("assetAcceptedRisks",[])
+    for image_accept in asset_accepted_risks:
+        accept_def_idx = image_accept["index"]
+        accept_def = risk_accept_defs[accept_def_idx]
+        status = accept_def["status"]
+        if status == "active":
+            risk_accepted = True
+            break
+
+    # Process vuln accepts
+    if risk_accepted == False:
+        vuln_accepted_risks = vuln.get("acceptedRisks",[])
+        for vuln_accept in vuln_accepted_risks:
+            accept_def_idx = vuln_accept["index"]
+            accept_def = risk_accept_defs[accept_def_idx]
+            status = accept_def["status"]
+            if status == "active":
+                risk_accepted = True
+                break
+
+    return risk_accepted
 
 def _get_scan_results_list_with_vulnerabilties(scan_results_list):
 
@@ -307,9 +351,11 @@ def _get_scan_results_list_with_vulnerabilties(scan_results_list):
         total_vulns = 0
         total_vulns += result["vulnTotalBySeverity"]["critical"]
         total_vulns += result["vulnTotalBySeverity"]["high"]
-        total_vulns += result["vulnTotalBySeverity"]["low"]
-        total_vulns += result["vulnTotalBySeverity"]["medium"]
-        total_vulns += result["vulnTotalBySeverity"]["negligible"]
+
+        # Hardcoded to only include image results critical and high vulns
+        #total_vulns += result["vulnTotalBySeverity"]["low"]
+        #total_vulns += result["vulnTotalBySeverity"]["medium"]
+        #total_vulns += result["vulnTotalBySeverity"]["negligible"]
 
         if total_vulns > 0:
             scan_results_list_with_vulns.append(result)
@@ -332,7 +378,7 @@ def _get_runtime_workload_scan_results_list():
         json_response = json.loads(response_data)
 
         LOG.debug(f"Found {len(json_response['data'])} entries in the json_response")
-
+        
         runtime_workload_scan_results.extend(json_response["data"])
 
         if "next" in json_response["page"]:
@@ -356,7 +402,7 @@ def _get_image_scan_results(scan_results_list_with_vulns):
     num_of_requests = 0
     for result in scan_results_list_with_vulns:
 
-        #print(spinner[spinner_idx],end="\r")
+        print(spinner[spinner_idx],end="\r")
         num_of_requests += 1
         print(f"{spinner[spinner_idx]} Retrieving {num_of_requests} of {num_of_results}...",end="\r")
         if spinner_idx == spinner_end:
@@ -369,7 +415,6 @@ def _get_image_scan_results(scan_results_list_with_vulns):
             response_data = _get_data_from_http_request(f"{api_url}/{resultId}")
             json_response = json.loads(response_data)
             image_scan_results[resultId]=json_response
-
 
     return image_scan_results
 
