@@ -85,11 +85,19 @@ def _parse_args():
         help="Sysdig Secure API Token",
     )
     parser.add_argument(
-        "--csv_file_name",
+        "--file_name",
         required=True,
         type=str,
         action="store",
-        help="CSV output file name",
+        help="Output file name",
+    )
+    parser.add_argument(
+        "--output_format",
+        required=False,
+        type=str,
+        choices=['json', 'csv'],
+        help="Specify output format for report. (default: %(default)s)",
+        default="csv"
     )
     return parser.parse_args()
 
@@ -102,10 +110,11 @@ def main():
         global secure_url_authority
         secure_url_authority = args.secure_url_authority
         authentication_bearer = args.api_token
-        csv_file_name = args.csv_file_name
+        file_name = args.file_name
+        output_format = args.output_format
 
-        if os.path.isfile(csv_file_name):
-            LOG.error(f"ERROR: The input csv file {csv_file_name} already exists!")
+        if os.path.isfile(file_name):
+            LOG.error(f"ERROR: The input file {file_name} already exists!")
             raise SystemExit(-1)
 
         # Get the timestamp of this run
@@ -140,12 +149,17 @@ def main():
             LOG.info(f"Found {len(images_with_vulns_scan_results)} runtime image scan results.")
 
             # Gather the report data
-            report_data = _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_results)
-            
-            # Save the report data to a csv file
-            with open(csv_file_name, 'w') as csv_output_file:
-                write = csv.writer(csv_output_file)
-                write.writerows(report_data)
+            if output_format == "csv":
+                report_data = _gather_report_data_csv(scan_results_list_with_vulns, images_with_vulns_scan_results)
+                # Save the report data to a csv file
+                with open(file_name, 'w') as csv_output_file:
+                    write = csv.writer(csv_output_file)
+                    write.writerows(report_data)
+            elif output_format == "json":
+                report_data = _gather_report_data_json(scan_results_list_with_vulns, images_with_vulns_scan_results)
+                # Save the report data to a json file
+                with open(file_name, 'w') as json_output_file:
+                    json.dump(report_data, json_output_file)                
 
         #end if
 
@@ -165,12 +179,13 @@ def main():
         LOG.error(f'Request to download runtime results failed.')
         raise SystemExit(-1)
 
-def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_results):
+def _gather_report_data_csv(scan_results_list_with_vulns, images_with_vulns_scan_results):
 
     report_data = []
 
     report_headers = []
     report_headers.append("Vulnerability ID")
+    report_headers.append("Scan time")
     report_headers.append("Severity")
     report_headers.append("Package name")
     report_headers.append("Package version")
@@ -218,6 +233,7 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
 
         image_id = images_with_vulns_scan_results[result_id]["result"]["metadata"]["imageId"]
         base_os = images_with_vulns_scan_results[result_id]["result"]["metadata"]["baseOs"]
+        scan_time = images_with_vulns_scan_results[result_id]["result"]["metadata"]["createdAt"]
 
         for package in images_with_vulns_scan_results[result_id]["result"].get("packages", {}):
 
@@ -251,6 +267,7 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
 
                 report_row = []
                 report_row.append(vuln_name)
+                report_row.append(scan_time)
                 report_row.append(vuln_severity_value)
                 report_row.append(package_name)
                 report_row.append(package_version)
@@ -267,7 +284,7 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
                 report_row.append(vuln_cvss_score_value_version)
                 report_row.append(vuln_cvss_score_value_score)
                 report_row.append(vuln_cvss_score_value_vector)
-                report_row.append('TODO') ### "Vuln link"
+                report_row.append(f'https://nvd.nist.gov/vuln/detail/{vuln_name}') ### "Vuln link"
                 report_row.append(vuln_disclosure_date)
                 report_row.append(vuln_solution_date)
                 report_row.append(vuln_fixed_in_version)
@@ -296,7 +313,105 @@ def _gather_report_data(scan_results_list_with_vulns, images_with_vulns_scan_res
 
         #end - for package
 
-    return report_data 
+    return report_data
+
+def _gather_report_data_json(scan_results_list_with_vulns, images_with_vulns_scan_results):
+
+    report_data = []
+    for result in scan_results_list_with_vulns:
+
+        result_id = result["resultId"]
+
+        kubernetes_cluster_name = result["scope"]["kubernetes.cluster.name"]
+        kubernetes_namespace_name = result["scope"]["kubernetes.namespace.name"]
+        kubernetes_pod_container_name = result["scope"]["kubernetes.pod.container.name"]
+        kubernetes_workload_name = result["scope"]["kubernetes.workload.name"]
+        kubernetes_workload_type = result["scope"]["kubernetes.workload.type"]
+
+        image_pull_string = images_with_vulns_scan_results[result_id]["result"]["metadata"].get("pullString")
+
+        #skip the result if the image pull string is blank
+        if image_pull_string == "":
+            LOG.warning(f"Found a blank image pull string for scan results id: {result_id}")
+            continue
+
+        image_id = images_with_vulns_scan_results[result_id]["result"]["metadata"]["imageId"]
+        base_os = images_with_vulns_scan_results[result_id]["result"]["metadata"]["baseOs"]
+        scan_time = images_with_vulns_scan_results[result_id]["result"]["metadata"]["createdAt"]
+
+        for package in images_with_vulns_scan_results[result_id]["result"].get("packages", {}):
+
+            # skip packages without vulns
+            if package.get("vulns") is None:
+                continue
+
+            package_type = package.get("type","")
+            package_name = package.get("name","")
+            package_version = package.get("version","")
+            package_path = package.get("path","")
+            package_suggested_fix = package.get("suggestedFix","")
+            package_in_use = package.get("inUse","")
+
+            for vuln in package.get("vulns",{}):
+
+                vuln_name = vuln.get("name","")
+                vuln_severity = vuln.get("severity", { "value": "", "sourceName" : "" })
+                vuln_severity_value = vuln_severity["value"]
+                vuln_severity_source = vuln_severity["sourceName"]
+                vuln_cvss_score = vuln.get("cvssScore", {'value': {'version': '', 'score': '', 'vector': ''}, 'sourceName': ''})
+                vuln_cvss_score_value = vuln_cvss_score.get("value",{'version': '', 'score': '', 'vector': ''})
+                vuln_cvss_score_value_version = vuln_cvss_score_value["version"]
+                vuln_cvss_score_value_score = vuln_cvss_score_value["score"]
+                vuln_cvss_score_value_vector = vuln_cvss_score_value["vector"]
+                vuln_cvss_score_source = vuln_cvss_score["sourceName"]
+                vuln_disclosure_date = vuln["disclosureDate"]
+                vuln_solution_date = vuln.get("solutionDate","")
+                vuln_exploitable = vuln["exploitable"]
+                vuln_fixed_in_version = vuln.get("fixedInVersion","")
+
+                report_item = {}
+                report_item['vuln_name'] = vuln_name
+                report_item['scan_time'] = scan_time
+                report_item['vuln_severity_value'] = vuln_severity_value
+                report_item['package_name'] = package_name
+                report_item['package_version'] = package_version
+                report_item['package_type'] = package_type
+                report_item['package_path'] = (package_path if package_type == "os" else "") ### we don't show package path for os packages
+                report_item['image_pull_string'] = image_pull_string
+                report_item['base_os'] = base_os
+                report_item['vuln_cvss_score_value_version'] = vuln_cvss_score_value_version
+                report_item['vuln_cvss_score_value_score'] = vuln_cvss_score_value_score
+                report_item['vuln_cvss_score_value_vector'] = vuln_cvss_score_value_vector
+                report_item['vuln_link'] = f'https://nvd.nist.gov/vuln/detail/{vuln_name}' ### "Vuln link"
+                report_item['vuln_disclosure_date'] = vuln_disclosure_date
+                report_item['vuln_solution_date'] = vuln_solution_date
+                report_item['vuln_fixed_in_version'] = vuln_fixed_in_version
+                report_item['vuln_exploitable'] = vuln_exploitable
+                report_item['kubernetes_cluster_name'] = kubernetes_cluster_name
+                report_item['kubernetes_namespace_name'] = kubernetes_namespace_name
+                report_item['kubernetes_workload_type'] = kubernetes_workload_type
+                report_item['kubernetes_workload_name'] = kubernetes_workload_name
+                report_item['kubernetes_pod_container_name'] = kubernetes_pod_container_name
+                report_item['image_id'] = image_id
+
+                # defaulting for now
+                #report_item[''] = 'TODO') ### "K8S POD count"
+                report_item['kubernetes_pod_count'] = '1' ### "K8S POD count"
+
+                report_item['package_suggested_fix'] = package_suggested_fix
+                report_item['package_in_use'] = package_in_use
+
+                # defaulting for now
+                #report_item[''] = 'TODO' ### "Risk accepted"
+                report_item['risk_accepted'] = 'false' ### "Risk accepted"
+
+                report_data.append(report_item)
+
+            #end - for vuln
+
+        #end - for package
+
+    return report_data
 
 def _get_scan_results_list_with_vulnerabilties(scan_results_list):
 
