@@ -160,17 +160,71 @@ echo "STATUS: Parsing helm template output file"
 input=${TEMPLATE_FILE}
 found_seperator="false"
 found_manifest_name="false"
+manifest_name_list=()
+
+item_in_array() {
+    local item_to_find=$1
+    shift
+    local array=("$@")
+
+    local found=false
+
+    for element in "${array[@]}"; do
+        if [ "$element" = "$item_to_find" ]; then
+            found=true
+            break
+        fi
+    done
+
+    # Return 0 if found, 1 if not found
+    if [ "$found" = true ]; then
+        return 0  # Found
+    else
+        return 1  # Not found
+    fi
+}
+
+added_lines="false"
 
 while IFS= read -r line
 do
-  if [ "$found_manifest_name" = "true" ] && [ "$line" != "---" ]; then 
+  if [ "$found_manifest_name" = "true" ] && [ "$line" != "---" ] && [ "$duplicate_manifest" = "false" ]; then 
     echo "$line" >> $manifest_name
   fi
-  if [ "$found_seperator" = "true" ]; then 
+  if [ "$found_manifest_name" = "true" ] && [ "$line" != "---" ] && [ "$duplicate_manifest" = "true" ] && [ "$added_lines" = "false" ]; then 
+    echo "---" >> $manifest_name
+    echo "$line" >> $manifest_name
+    duplicate_manifest="false"
+    added_lines="true"
+  fi
+  # echo $manifest_name
+  if [ "$found_seperator" = "true" ]; then
+    if [ "$line" = "---" ]; then 
+      continue
+    fi
+    # echo "THIS is line: $line"
     manifest_name="${line#*/}"
     manifest_name="${manifest_name#charts\/}"
     manifest_name="${manifest_name//templates\//}"
     manifest_name="${manifest_name//\//-}"
+    # echo "THIS is manifest_name: $manifest_name"
+    
+    item_in_array "$manifest_name" "${manifest_name_list[@]}"
+
+    # Check the return value of the function
+    # echo "${manifest_name_list[0]}"
+    if [ $? -eq 0 ]; then
+        echo "Item '$manifest_name' found in the array."
+        duplicate_manifest="true"
+        added_lines="false"
+        found_seperator="false"
+        found_manifest_name="true"
+        continue
+    fi
+
+    manifest_name_list+=($manifest_name)
+
+    duplicate_manifest="false"
     found_seperator="false"
     found_manifest_name="true"
   fi
@@ -204,6 +258,15 @@ mv nodeAnalyzer-psp.yaml ${prefix}sana-psp.yaml 2> /dev/null
 mv nodeAnalyzer-runtimeScanner-runtime-scanner-configmap.yaml ${prefix}sana-rs-cm.yaml 2> /dev/null
 mv nodeAnalyzer-secrets.yaml ${prefix}sana-se.yaml 2> /dev/null
 mv nodeAnalyzer-serviceaccount-node-analyzer.yaml ${prefix}sana-sa.yaml 2> /dev/null
+mv admissionController-webhook-admissioncontrollerconfigmap.yaml ${prefix}sa-ac-webhook-ac-cm.yaml 2> /dev/null
+mv admissionController-webhook-admissionregistration.yaml ${prefix}sa-ac-webhook-tls-se.yaml 2> /dev/null
+mv admissionController-webhook-clusterrole.yaml ${prefix}sa-ac-webhook-cr.yaml 2> /dev/null
+mv admissionController-webhook-clusterrolebinding.yaml ${prefix}sa-ac-webhook-crb.yaml 2> /dev/null
+mv admissionController-webhook-configmap.yaml ${prefix}sa-ac-webhook-cm.yaml 2> /dev/null
+mv admissionController-webhook-deployment.yaml ${prefix}sa-ac-webhook-de.yaml 2> /dev/null
+mv admissionController-webhook-secret.yaml ${prefix}sa-ac-webhook-se.yaml 2> /dev/null
+mv admissionController-webhook-service.yaml ${prefix}sa-ac-webhook-svc.yaml 2> /dev/null
+mv admissionController-webhook-serviceaccount.yaml ${prefix}sa-ac-webhook-sa.yaml 2> /dev/null
 mv nodeAnalyzer-configmap-kspm-analyzer.yaml sana-kspm-cm.yaml 2> /dev/null
 mv nodeAnalyzer-configmap-host-scanner.yaml sana-hs-cm.yaml 2> /dev/null
 mv kspmCollector-clusterrole.yaml sa-kspm-cr.yaml 2> /dev/null
