@@ -12,6 +12,7 @@
 #
 # Date: November 2th, 2022
 # Updated: February 14th, 2023
+# Updated: August 9th, 2024 - to support cluster shield
 #
 #===========================================================
 
@@ -156,80 +157,33 @@ fi
 #
 # Parse the helm output into individual files
 #
-echo "STATUS: Parsing helm template output file"
+echo "STATUS: Parsing the helm template ouput into individual manifest files"
 input=${TEMPLATE_FILE}
-found_seperator="false"
-found_manifest_name="false"
-manifest_name_list=()
-
-item_in_array() {
-    local item_to_find=$1
-    shift
-    local array=("$@")
-
-    local found=false
-
-    for element in "${array[@]}"; do
-        if [ "$element" = "$item_to_find" ]; then
-            found=true
-            break
-        fi
-    done
-
-    # Return 0 if found, 1 if not found
-    if [ "$found" = true ]; then
-        return 0  # Found
-    else
-        return 1  # Not found
-    fi
-}
-
-added_lines="false"
+manifest_name=""
 
 while IFS= read -r line
 do
-  if [ "$found_manifest_name" = "true" ] && [ "$line" != "---" ] && [ "$duplicate_manifest" = "false" ] && [[ $line != "# Source:"* ]]; then 
-    echo "$line" >> $manifest_name
-  fi
-  if [ "$found_manifest_name" = "true" ] && [ "$line" != "---" ] && [ "$duplicate_manifest" = "true" ] && [ "$added_lines" = "false" ]; then 
-    echo "---" >> $manifest_name
-    echo "$line" >> $manifest_name
-    duplicate_manifest="false"
-    added_lines="true"
-  fi
-  if [[ $line == "# Source:"* ]]; then 
-    echo "Found Source: $line"
 
-    #echo "THIS is line: $line"
+  if [[ $line == "# Source:"* ]]; then 
+
+    #echo "Found manifest helm template source: $line"
+
+    # Parse and create destination manifest file name
     manifest_name="${line#*/}"
     manifest_name="${manifest_name#charts\/}"
     manifest_name="${manifest_name//templates\//}"
     manifest_name="${manifest_name//\//-}"
-    #echo "THIS is manifest_name: $manifest_name"
-    
-    item_in_array "$manifest_name" "${manifest_name_list[@]}"
 
-    # Check the return value of the function
-    #echo "${manifest_name_list[0]}"
-    if [ $? -eq 0 ]; then
-        #echo "Item '$manifest_name' found in the array."
-        duplicate_manifest="true"
-        added_lines="false"
-        found_seperator="false"
-        found_manifest_name="true"
-        continue
-    fi
+    #echo "Writing to manifest_name: $manifest_name"
 
-    manifest_name_list+=($manifest_name)
-
-    duplicate_manifest="false"
-    found_seperator="false"
-    found_manifest_name="true"
   fi
-# if [ "$line" = "---" ]; then 
-#   found_seperator="true"
-#   found_manifest_name="false"
-# fi
+
+  if [ "$manifest_name" != "" ]; then
+    echo "$line" >> $manifest_name
+  # else
+    # echo "Skipping line: $line"
+  fi
+
 done < $input
 
 rm ${TEMPLATE_FILE}
