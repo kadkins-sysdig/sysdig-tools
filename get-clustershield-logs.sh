@@ -9,11 +9,18 @@ fi
 # Set the namespace from the command line argument
 namespace="$1"
 
+# Check if oc is available, otherwise fall back to kubectl
+if command -v oc &>/dev/null; then
+    KUBECTL_CMD="oc"
+else
+    KUBECTL_CMD="kubectl"
+fi
+
 # Get the list of clustershield pods
-podNameList=$(kubectl get pods -n "$namespace" -l app.kubernetes.io/name=clustershield --no-headers -o custom-columns=":metadata.name")
+podNameList=$($KUBECTL_CMD get pods -n "$namespace" -l app.kubernetes.io/name=clustershield --no-headers -o custom-columns=":metadata.name")
 
 # Get the cluster name from the clustershield config map
-clusterName=$(kubectl get configmap -n "$namespace" sysdig-clustershield -o json | jq '.data."cluster-shield.yaml"' | grep -oP 'name:\s*\K[\w\-]+' | head -n 1)
+clusterName=$($KUBECTL_CMD get configmap -n "$namespace" sysdig-clustershield -o json | jq '.data."cluster-shield.yaml"' | grep -oP 'name:\s*\K[\w\-]+' | head -n 1)
 
 # Iterate over each pod in the pod list
 for podName in $podNameList
