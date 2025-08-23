@@ -22,14 +22,20 @@ podNameList=$($KUBECTL_CMD get pods -n "$namespace" -l app.kubernetes.io/name=cl
 # Get the cluster name from the clustershield config map
 clusterName=$($KUBECTL_CMD get configmap -n "$namespace" sysdig-clustershield -o json | jq '.data."cluster-shield.yaml"' | grep -oP 'name:\s*\K[\w\-]+' | head -n 1)
 
+# Generate a timestamp
+timestamp=$(date +%Y%m%d-%H%M%S)
+
 # Iterate over each pod in the pod list
 for podName in $podNameList
 do
-    # Get the logs and save them to a file named <clusterName>-<podName>.log
-    kubectl logs -n "$namespace" "$podName" > "$clusterName-$podName.log"
+    # Build the output filename with cluster, pod, and timestamp
+    outFile="${clusterName}-${podName}-${timestamp}.log"
+
+    # Get the logs and save them to a timestamped file
+    $KUBECTL_CMD logs -n "$namespace" "$podName" > "$outFile"
 
     # gzip the log file
-    gzip "$clusterName-$podName.log"
+    gzip "$outFile"
 
-    echo "Log collected for $podName and output to: $clusterName-$podName.log.gz"
+    echo "Log collected for $podName and output to: ${outFile}.gz"
 done
