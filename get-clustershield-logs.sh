@@ -6,7 +6,6 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-# Set the namespace from the command line argument
 namespace="$1"
 
 # Check if oc is available, otherwise fall back to kubectl
@@ -20,22 +19,43 @@ fi
 podNameList=$($KUBECTL_CMD get pods -n "$namespace" -l app.kubernetes.io/name=clustershield --no-headers -o custom-columns=":metadata.name")
 
 # Get the cluster name from the clustershield config map
-clusterName=$($KUBECTL_CMD get configmap -n "$namespace" sysdig-clustershield -o json | jq '.data."cluster-shield.yaml"' | grep -oP 'name:\s*\K[\w\-]+' | head -n 1)
+clusterName=$($KUBECTL_CMD get configmap -n "$namespace" sysdig-clustershield -o json \
+    | jq '.data."cluster-shield.yaml"' \
+    | grep -oP 'name:\s*\K[\w\-]+' | head -n 1)
 
 # Generate a timestamp
 timestamp=$(date +%Y%m%d-%H%M%S)
 
+# Directory to hold temporary logs
+workdir="logs-${clusterName}-${timestamp}"
+mkdir -p "$workdir"
+
+# Array to keep track of per-pod tar files
+tarFiles=()
+
 # Iterate over each pod in the pod list
 for podName in $podNameList
 do
-    # Build the output filename with cluster, pod, and timestamp
-    outFile="${clusterName}-${podName}-${timestamp}.log"
+    logFile="${podName}.log"
+    tarFile="${clusterName}-${podName}-${timestamp}.tar"
 
-    # Get the logs and save them to a timestamped file
-    $KUBECTL_CMD logs -n "$namespace" "$podName" > "$outFile"
+    # Collect logs
+    $KUBECTL_CMD logs -n "$namespace" "$podName" > "$workdir/$logFile"
 
-    # gzip the log file
-    gzip "$outFile"
+    # Create a tarball containing the log
+    tar -cf "$workdir/$tarFile" -C "$workdir" "$logFile"
 
-    echo "Log collected for $podName and output to: ${outFile}.gz"
+    # Clean up the raw log file
+    rm -f "$workdir/$logFile"
+
+    # Track the tar file
+    tarFiles+=("$workdir/$tarFile")
+
+    echo "Log collected and archived for $podName: $workdir/$tarFile"
 done
+
+# Combine only the tracked tar files into one gzipped archive
+finalArchive="${clusterName}-all-logs-${timestamp}.tar.gz"
+tar -czf "$finalArchive" -C "$workdir" $(basename -a "${tarFiles[@]}")
+
+echo "All tar files combined into archive: $finalArchive"
